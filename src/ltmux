@@ -117,6 +117,12 @@ __ltmux_login(){
 		#
 		[[ -f "$ltmux_lock" ]] || exit 0
 
+
+		# if we are here, lock file was not removed
+		# we will start countin exists, and if we
+		# reach 3 exists in period of 10 second or
+		# less we will end existing login session
+		#
 		exit_count=$((++exit_count))
 
 		curr_time=$(date +%s)
@@ -343,7 +349,7 @@ __ltmux_enable_zsh(){
 		######### ltmux BEGIN ##########################################
 		#
 		# This is automaticaly added by script. Do not edit these
-		# lines. Leave this as a last part of  your .profile file
+		# lines. Leave this as a last part of  your ${login_file##*/} file
 
 		$tmux_command
 
