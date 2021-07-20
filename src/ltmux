@@ -1,0 +1,651 @@
+#!/usr/bin/zsh
+
+
+######################
+# main functions
+#
+__ltmux_help(){
+	cat <<-EOF |
+
+		synopsis:
+		   usage: ltmux command [option]
+
+		commands:
+		   info                     - short info on "ltmux"
+
+		   enable                   - enable starting tmux at login
+		   disable                  - disable starting tmux at login
+		   config {install|remove}  - install/remove customized tmux
+		                              configuration file (.tmux.conf)
+
+	EOF
+	sed -e 's/^/   /'
+}
+
+__ltmux_info(){
+	cat <<-EOF |
+		__LTMUX_INFO_FILE__
+	EOF
+	base64 -d | less -RFX
+}
+
+__ltmux_login(){
+	{echo -n "tmux login: "; date} >> /tmp/ltmux_login
+
+	local ltmux_pause=0.4
+
+	local parent=$(
+		ps --no-headers -o comm -p $(
+			ps --no-headers -o ppid -p $(
+				ps --no-headers -o ppid -p $$ -o ppid
+			)
+		)
+	)
+
+	#########################################################################
+	#
+	# If this is login session tmux session will be automatically started. If
+	# such session already exist, we will attach to it, thus disconnecting
+	# previous session. Each login on host, will disconnect previous session
+	# (and automatically kick user out from the host). As a result, there will
+	# be only one login session.
+	#
+	[[ $parent != login ]] && [[ $parent != sshd ]] && exit 1
+
+	# We will start continuous loop to prevent accidental exits from tmux
+	# session
+	#
+	# Before creating new, or attaching to existng session, we will create
+	# lock file. Exitance of lock file signals that exit from tmux was
+	# accidental. In such case we will stay in loop
+	#
+	local ltmux_lock
+	local ltmux_session="ltmux-$LOGNAME"
+	local client_tty
+	local exit_count=0
+	local first_exit
+	local curr_time
+
+	while true; do
+		{echo -n "in loop:    "; date} >> /tmp/ltmux_login
+
+		ltmux_lock="/run/user/$EUID/ltmux.lck"
+
+		# there is existing tmux session
+		#
+		if tmux has-session -t $ltmux_session 2>/dev/null; then
+
+			client_tty=$(tmux list-clients -t $ltmux_session -F '#{client_tty}')
+
+			# there is client attached to this session
+			# detach that client (kick him out of login
+			# session).
+			#
+			if [[ -n $client_tty ]]; then
+				rm -f $ltmux_lock
+				tmux detach-client -s $ltmux_session
+
+				# We need this sleep, to alow old client
+				# to log out. If we don't make a pause
+				# we will create lock file so quick, that
+				# client will not know that it has to log
+				# out, and we will end in endless loop
+				# in which clients will kill each other
+				#
+				sleep $ltmux_pause
+			fi
+
+			# attach yourself to existing session
+			#
+			touch $ltmux_lock
+			tmux attach -t $ltmux_session
+
+		# there is no tmux session running
+		# we should create a new one
+		#
+		else
+			touch $ltmux_lock
+			tmux new -s $ltmux_session \; setenv -g LTMUX_LOCK_FILE "$ltmux_lock"
+			
+		fi
+
+		# We have exited session!
+		#
+		# If ther is no lock file, exit from session was
+		# inentional, and for that reason we also have
+		# to end existing login session
+		#
+		[[ -f "$ltmux_lock" ]] || exit 0
+
+		exit_count=$((++exit_count))
+
+		curr_time=$(date +%s)
+		[[ $((curr_time - first_exit)) -gt 10 ]] && exit_count=1
+
+		[[ $exit_count -eq 1 ]] && first_exit=$curr_time && continue
+		[[ $exit_count -eq 3 ]] && exit 0
+
+	done
+
+}
+
+__ltmux_enable(){
+	local g='[32m'
+	local y='[33m'
+	local n='[0m'
+
+	local login_shell=$(
+		basename $(getent passwd $LOGNAME | awk -F: '{print $7}')
+	)
+
+	local login_file
+
+	case $login_shell in
+		zsh)   __ltmux_enable_zsh;;
+		bash)  __ltmux_enable_bash;;
+		*)     __ltmux_enable_fail; exit 1;;
+	esac
+
+	cat <<-EOF
+	   ${g}
+	   ltmux was added to your${y} ${login_file#$HOME/} ${g}file!
+	   ${n}
+	EOF
+
+	local config_file=~/.tmux.conf
+	local ltmux_config=$(__ltmux_config_present)
+	
+	if [[ -z $ltmux_config ]]; then
+		local yesno
+
+		echo -n  "   ${g}Do you want to install default ltmux config [Y/n]: ${n}"
+		read yesno
+
+		if [[ -z $yesno ]] || [[ $yesno = Y ]] || [[ $yesno = y ]]; then
+			__ltmux_config_install
+
+		else
+			echo
+		fi
+	fi
+
+	__ltmux_exit_keys_remove
+	__ltmux_exit_keys_add
+
+}
+
+__ltmux_disable(){
+	local g='[32m'
+	local y='[33m'
+	local n='[0m'
+
+	local login_shell=$(
+		basename $(getent passwd $LOGNAME | awk -F: '{print $7}')
+	)
+
+	case $login_shell in
+		bash)  __ltmux_disable_bash;;
+		zsh)   __ltmux_disable_zsh;;
+		*)     __ltmux_disable_fail; exit 1;;
+	esac
+
+	cat <<-EOF
+	   ${g}
+	   ${y}ltmux${g} login script has been removed from startup scripts!
+	   ${n}
+	EOF
+
+	local config_file=~/.tmux.conf
+	local ltmux_config=$(__ltmux_config_present)
+
+	if [[ -n $ltmux_config ]]; then
+		local yesno
+
+		echo -n "   ${g}Do you want to remove default ltmux config [Y/n]: ${n}"
+		read yesno
+
+		if [[ -z $yesno ]] || [[ $yesno = Y ]] || [[ $yesno = y ]]; then
+			__ltmux_config_remove
+		else
+			echo
+		fi
+	fi
+
+	__ltmux_exit_keys_remove
+}
+
+__ltmux_config(){
+	case $1 in
+		install) __ltmux_config_install;;
+		remove)  __ltmux_config_remove;;
+		edit)    __ltmux_config_edit;;
+		*)       __ltmux_help;;
+	esac
+}
+
+
+
+########################################
+# enable/disable
+#
+__ltmux_enable_bash(){
+
+	local bash_rc="$HOME/.bashrc"
+	local bash_profile="$HOME/.bash_profile"
+	local bash_login="$HOME/.bash_login"
+	local profile_file="$HOME/.profile"
+
+	if [[ -f $bash_profile ]]; then
+		login_file=$bash_profile
+
+	elif [[ -f $bash_login ]]; then
+		login_file=$bash_login
+
+	elif [[ -f $profile_file ]]; then
+		login_file=$profile_file
+
+	else
+		login_file=$bash_profile
+
+	fi
+
+	__ltmux_disable_bash
+
+	# modify .bashrc
+	#
+	cat <<-EOF >> $bash_rc
+
+		######### ltmux BEGIN ##########################################
+		#
+		# This is automaticaly added by script. Do not edit these lines.
+		
+		LTMUX_SOURCED=1
+
+		########## ltmux END ###########################################
+	EOF
+
+
+	# modify .bash_profile | .bash_login | .profile
+	#
+	cat <<-EOF >> $login_file
+
+		######### ltmux BEGIN ##########################################
+		#
+		# This is automaticaly added by script. Do not edit these
+		# lines. Leave this as a last  part of your ${login_file##*/}
+	EOF
+
+	cat <<-"EOF" >> $login_file
+		
+
+		if hash ltmux 2>/dev/null; then
+
+		    # include .bashrc if it exists and it
+		    # has not been sourced yet
+		    #
+		    # force_color_prompt=yes
+
+		    [ -z $LTMUX_SOURCED  ] &&
+		    [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
+
+		    ltmux login && logout
+		fi
+
+		########## ltmux END ###########################################
+	EOF
+
+
+	[[ -x $login_file ]] || chmod u+x $login_file
+}
+
+__ltmux_disable_bash(){
+	local login_files
+
+	login_files=(
+		"$HOME/.bash_profile"
+		"$HOME/.bash_login"
+		"$HOME/.profile"
+		"$HOME/.bashrc"
+	)
+
+	local login_file
+	for login_file in "${login_files[@]}"; do
+		[[ -f $login_file ]] || continue
+
+		__ltmux_clean_profile $login_file > $login_file.tmp
+		cat $login_file.tmp > $login_file
+	done
+}
+
+__ltmux_enable_zsh(){
+
+	local zsh_profile="${ZDOTDIR:-$HOME}/.zprofile"
+	local zsh_login="${ZDOTDIR:-$HOME}/.zlogin"
+	local tmux_command
+
+	if [[ -f $zsh_login ]]; then
+		login_file=$zsh_login
+		tmux_command='hash ltmux 2>/dev/null && ltmux login && logout'
+
+	elif [[ -f $zsh_profile ]]; then
+		login_file=$zsh_profile
+		tmux_command='[[ ! -f ${ZDOTDIR:-$HOME}/.zlogin ]] && hash ltmux 2>/dev/null && ltmux login && logout'
+
+	else
+		login_file=$zsh_login
+		tmux_command='hash ltmux 2>/dev/null && ltmux login && logout'
+	fi
+
+	__ltmux_disable_zsh
+
+	cat <<-EOF >> $login_file
+
+		######### ltmux BEGIN ##########################################
+		#
+		# This is automaticaly added by script. Do not edit these
+		# lines. Leave this as a last part of  your .profile file
+
+		$tmux_command
+
+		########## ltmux END ###########################################
+	EOF
+
+	[[ -x $login_file ]] || chmod u+x $login_file
+}
+
+__ltmux_disable_zsh(){
+	login_files=(
+		"${ZDOTDIR:-$HOME}/.zprofile"
+		"${ZDOTDIR:-$HOME}/.zlogin"
+	)
+
+	local login_file
+	for login_file in "${login_files[@]}"; do
+		[[ -f $login_file ]] || continue
+
+		__ltmux_clean_profile $login_file > $login_file.tmp
+		cat $login_file.tmp > $login_file
+	done
+}
+
+__ltmux_clean_profile(){
+	[[ ! -f $1 ]] && return
+
+	cat $1 |\
+	awk '
+		/^[ 	]*$/      {spaces = spaces "\n"; next}
+		/### ltmux BEGIN ###/  {ltmux=1; next}
+		/### ltmux END ###/    {ltmux=0; spaces=""; next}
+
+		! ltmux {
+			if (spaces != "")printf "%s", spaces;
+			spaces = ""
+			print
+		}
+	'
+}
+
+__ltmux_enable_fail(){
+	__ltmux_disable_fail
+}
+
+__ltmux_disable_fail(){
+local g='[32m'
+	local y='[33m'
+	local n='[0m'
+
+	cat <<-EOF
+	   ${g}
+	   ltmux can be enbaled/disabled only for ${y}bash & zsh${g} login shells!
+	   ${n}
+	EOF
+}
+
+
+
+########################################
+# config install/remove
+#
+__ltmux_config_install(){
+	local g='[32m'
+	local y='[33m'
+	local n='[0m'
+
+	local config_file=~/.tmux.conf
+	local ltmux_config=$(__ltmux_config_present)
+	local moved=0
+
+	if [[ -f $config_file ]] && [[ -z $ltmux_config ]]; then
+		mv $config_file $config_file.ORG
+		moved=1
+	fi
+
+	__ltmux_config_output > $config_file
+	__ltmux_exit_keys_add
+
+	echo    "   "
+	echo -n "   ${y}ltmux${g} config file installed!"
+
+	if [[ $moved -eq 1 ]]; then
+		echo " Old config saved!"
+	else
+		echo
+	fi
+
+	echo ${n}
+}
+
+__ltmux_config_remove(){
+	local r='[31m'
+	local g='[32m'
+	local y='[33m'
+	local n='[0m'
+
+	local config_file=~/.tmux.conf
+	
+	local ltmux_config=$(__ltmux_config_present)
+
+	if [[ -f $config_file ]] && [[ -z $ltmux_config ]]; then
+		cat <<-EOF
+		   ${g}
+		   Not ${y}ltmux${g} config. Not going to remove it!
+		   ${n}
+		EOF
+
+		exit 1
+	fi
+
+	# echo empty line and start green text
+	#
+	echo "   ${g}"
+
+	# if present ltmux config remove it
+	#
+	if [[ -n $ltmux_config ]]; then
+		local message
+
+		if message=$(rm $config_file 2>&1); then
+			echo -n "   Default ${y}ltmux${g} config removed! "
+
+		else
+			cat <<-EOF
+			   ${r}Failed to remove ${y}ltmux${r} config file!
+			   ${n}
+			   $message
+			
+			EOF
+
+			exit 1
+		fi
+	fi
+
+	# if old config is present restore it
+	#
+	if [[ -f $config_file.ORG ]]; then
+		[[ -z $ltmux_config ]] && echo "   "
+
+		mv $config_file.ORG $config_file &&
+		echo "Old config restored!"
+
+	elif [[ -n $ltmux_config ]]; then
+		echo
+
+	fi
+
+	if [[ ! -f $config_file ]] && [[ -z $ltmux_config ]]; then
+		echo "   No tmux config file to remove!"
+	fi
+
+	echo ${n}
+}
+
+__ltmux_config_edit(){
+	local g='[32m'
+	local y='[33m'
+	local n='[0m'
+
+	local message
+	local config_file=~/.tmux.conf
+
+	if [[ ! -f $config_file ]]; then
+		cat <<-EOF
+		   ${g}
+		   There is no tmux config file to edit!
+		   ${n}
+		EOF
+
+		exit 1
+	fi
+
+	local ltmux_config=$(__ltmux_config_present)
+
+	if [[ -z $ltmux_config ]]; then
+		cat <<-EOF
+		   ${g}
+		   Existing tmux config file is not from ${y}ltmux${g}!
+		   We are not going to edit it!
+		   ${n}
+		EOF
+
+		exit 1
+	fi
+
+	#####################################
+	# select editor
+	#
+	local active_editor
+
+	if which ${EDITOR:-not_to_be_found_editor} >/dev/null 2>&1; then
+		active_editor=$EDITOR
+
+	elif which ${VISUAL:-not_to_be_found_editor} >/dev/null 2>&1; then
+		active_editor=$VISUAL
+
+	elif which ${SELECTED_EDITOR:-not_to_be_found_editor} >/dev/null 2>&1; then
+		active_editor=$SELECTED_EDITOR
+
+	else
+		active_editor=nano
+
+	fi
+
+	$active_editor $config_file
+}
+
+__ltmux_config_output(){
+	cat <<- EOF |
+		__LTMUX_CONFIG_FILE__
+	EOF
+	base64 -d
+}
+
+__ltmux_config_present(){
+	local config_file=~/.tmux.conf
+
+	[[ -f $config_file ]] || return
+
+	grep 'This is ltmux default config file!' $config_file
+	grep '##### LTMUX DEFAULT CONFIG #####'   $config_file
+}
+
+
+########################################
+# exit keys install/remove
+#
+__ltmux_exit_keys_add(){
+	local config_file=~/.tmux.conf
+
+	cat <<-"EOF" >> $config_file
+
+		##### EXIT KEYS ####################################################
+		#
+		# To properly exit presistent tmux session, lock file has to
+		# be removed. Here are defined key bindings for "exit keys":
+		#  
+		#    Exit:  Prefix + x
+		#    Quit:  Prefix + q
+		#
+		# You can change key binding to suit your need, but do not
+		# change the code! Do not edit commented lines. They are 
+		# automaticaly added by script and will also be removed.
+		#
+		
+		bind-key q \
+		    confirm -p \
+		       "Do you realy want to QUIT the session? (y/n): " \
+		       'run-shell -b \
+		        "#{?LTMUX_LOCK_FILE,rm -rf \"#{LTMUX_LOCK_FILE}\",:}; \
+		        tmux detach-client"'
+		
+		bind-key x \
+		    confirm -p \
+		       "Do you realy want to EXIT and KILL the session? (y/n):" \
+		       'run-shell -b \
+		        "#{?LTMUX_LOCK_FILE,rm -rf \"#{LTMUX_LOCK_FILE}\",:}; \
+		        tmux kill-session"'
+
+		#
+		##### EXIT KEYS ####################################################
+	EOF
+}
+
+__ltmux_exit_keys_remove(){
+	local config_file=~/.tmux.conf
+
+	[[ -f $config_file ]] || return
+
+	cat $config_file |\
+	awk '
+		/^[ 	]*$/         {spaces = spaces "\n";   next}
+		/### EXIT KEYS ###/  {exit_keys = !exit_keys; next}
+
+		! exit_keys{
+			if (spaces != "")printf "%s", spaces;
+			spaces = ""
+			print
+		}
+	' > $config_file.tmp
+
+	mv $config_file.tmp $config_file
+}
+
+
+
+########################################
+# argument parser
+#
+ltmux_run(){
+	local cmd=$1; shift
+
+	case $cmd in
+		enable)  __ltmux_enable;;
+		disable) __ltmux_disable;;
+		login)   __ltmux_login;;
+		config)  __ltmux_config $@;;
+		info)    __ltmux_info;;
+		*)       __ltmux_help;;
+	esac
+
+}
+
+ltmux_run $@

@@ -1,0 +1,71 @@
+
+   synopsys:
+      The role of this script is to start tmux automatically on login session
+      (the  one  which involves  logging in  with credentials),  to attach to
+      existing tmux session if one already exists,  and to prevent accidental
+      exiting  from tmux  (later can happen  if we unintentionally close last
+      "panel" in tmux, for example by exiting shell with CTRL+D).
+      
+      By attaching to existing tmux session, we achieve that only one session
+      is  running per user login.  Aka.  each new ssh to host will disconnect
+      active  ssh  session  (by stealing tmux session),  while preserving all
+      what is running in current session.  Same rule applies to console login
+      session, which will steal any active tmux session (being ssh or console
+      session).  Basically only one  tmux login session can exist, and conse-
+      quentially only one login session.
+
+
+   ending session:
+      When  ltmux  is  enabled,  session has to be exited using following key
+      combinations (called "exit keys"):
+
+         prefix q   - quit session preserving current
+                      layout and active processes
+
+         prefix x   - kill  all active  processes and 
+                      destroy current tmux session
+
+      Above "exit keys" combination is defined in .tmux.config file. It can
+      be freely modified by user, but the code itself should be preserved.
+
+      If  for any  reason above  keys stop  working, session can be exited by
+      ending tmux sessions 3 times in prediod of 10 seconds or less (the ea-
+      siest way to achieve this is to press CTRL+D 3 times, in last existing
+      pane).
+
+
+   enabling/disabling:
+      This  script  is  run  from  login scripts,  which in  turn are sourced
+      during  login  process.  Which  scripts  is  involved depends on  shell
+      (bash/zsh)  and  present  files  (not all rc files have to be present).
+      If no file is present in user's home directory one is created.
+      
+      To enable/disable ltmux on login run:
+      
+          ltmux {enable|disable}
+
+      [32mNOTE:
+         It  is  only possible  to  enable/disable ltmux for bash & zsh login
+         shell.
+
+
+   default config file:
+      We can also "install" default tmux config file, issuing:
+      
+          ltmux config install
+      
+      If  tmux  config file  (.tmux.conf)  already exists,  and it is not the
+      ltmux's config file, it will be preserved as ".tmux.conf.ORG",  and can
+      be restored issuing:
+      
+         ltmux config remove
+      
+      "config install" can be run multiple times, but only one copy of
+      ".tmux.conf.ORG" will be preserved.
+
+      You  can  freealy  edit  config file,  but preserve commented out lines
+      identifying it as default ltmux config file.
+
+
+   [32mMore info:[0m  https://github.com/ksk0/ltmux
+
