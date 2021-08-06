@@ -261,13 +261,13 @@ __ltmux_enable_bash(){
 	#
 	cat <<-EOF >> $bash_rc
 
-		######### ltmux BEGIN ##########################################
+		######### ADDED BY LTMUX #######################################
 		#
 		# This is automaticaly added by script. Do not edit these lines.
 		
 		LTMUX_SOURCED=1
 
-		########## ltmux END ###########################################
+		########## ADDED BY LTMUX ######################################
 	EOF
 
 
@@ -275,7 +275,7 @@ __ltmux_enable_bash(){
 	#
 	cat <<-EOF >> $login_file
 
-		######### ltmux BEGIN ##########################################
+		######### ADDED BY LTMUX #######################################
 		#
 		# This is automaticaly added by script. Do not edit these
 		# lines. Leave this as a last  part of your ${login_file##*/}
@@ -297,7 +297,7 @@ __ltmux_enable_bash(){
 		    ltmux login && logout
 		fi
 
-		########## ltmux END ###########################################
+		########## ADDED BY LTMUX ######################################
 	EOF
 
 
@@ -346,14 +346,14 @@ __ltmux_enable_zsh(){
 
 	cat <<-EOF >> $login_file
 
-		######### ltmux BEGIN ##########################################
+		######### ADDED BY LTMUX #######################################
 		#
 		# This is automaticaly added by script. Do not edit these
 		# lines. Leave this as a last part of  your ${login_file##*/} file
 
 		$tmux_command
 
-		########## ltmux END ###########################################
+		########## ADDED BY LTMUX ######################################
 	EOF
 
 	[[ -x $login_file ]] || chmod u+x $login_file
@@ -379,9 +379,8 @@ __ltmux_clean_profile(){
 
 	cat $1 |\
 	awk '
-		/^[ 	]*$/      {spaces = spaces "\n"; next}
-		/### ltmux BEGIN ###/  {ltmux=1; next}
-		/### ltmux END ###/    {ltmux=0; spaces=""; next}
+		/^[ 	]*$/             {spaces = spaces "\n"; next}
+		/### ADDED BY LTMUX ###/ {ltmux = !ltmux; if (ltmux == 0) spaces = ""; next}
 
 		! ltmux {
 			if (spaces != "")printf "%s", spaces;
