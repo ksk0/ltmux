@@ -1,5 +1,5 @@
 
-   synopsys:
+   synopsis:
       The role of this script is to start tmux automatically on login session
       (the  one  which involves  logging in  with credentials),  to attach to
       existing tmux session if one already exists,  and to prevent accidental
@@ -7,7 +7,7 @@
       "panel" in tmux, for example by exiting shell with CTRL+D).
       
       By attaching to existing tmux session, we achieve that only one session
-      is  running per user login.  Aka.  each new ssh to host will disconnect
+      is  running per user login.  Aka,  each new ssh to host will disconnect
       active  ssh  session  (by stealing tmux session),  while preserving all
       what is running in current session.  Same rule applies to console login
       session, which will steal any active tmux session (being ssh or console
@@ -25,11 +25,11 @@
          prefix x   - kill  all active  processes and 
                       destroy current tmux session
 
-      Above "exit keys" combination is defined in .tmux.config file. It can
+      Above "exit keys"  combination is  defined in  .tmux.conf file. It can
       be freely modified by user, but the code itself should be preserved.
 
       If  for any  reason above  keys stop  working, session can be exited by
-      ending tmux sessions 3 times in prediod of 10 seconds or less (the ea-
+      ending tmux sessions 3 times in period of 10 seconds or less (the ea-
       siest way to achieve this is to press CTRL+D 3 times, in last existing
       pane).
 

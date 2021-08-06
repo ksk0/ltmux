@@ -5,8 +5,8 @@ keys_file   = ltmux.keys
 
 bin_dir = /usr/local/bin
 
-shell   != which bzsh || echo /bin/bash
-is_zsh  != which bzsh
+shell   != which zsh || echo /bin/bash
+is_zsh  != which zsh
 is_bash != which bash
 
 bash_complete = complete.bash
