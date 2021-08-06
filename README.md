@@ -78,6 +78,15 @@ If user chooses not to install default config file, existing one will be
 modified to include **exit keys** (see below). User can modified default
 **exit keys** combination, but should leave the coresponding code intact.
 
+# Modifying default config
+User can freely modify default config, in any way, but if default **ltmux**
+config is deleted those changes will be lost. Default config can be deleted
+by issuing `ltmux config remove` or when `ltmux disable` is executed.
+
+To prevent accidental deletion of config file, user has to change commented
+line at the beginning of the file as explained in file itself. If changed
+config file will be unaffected by `ltmux config remove` and `ltmux disable`.
+
 
 # How it works?
 

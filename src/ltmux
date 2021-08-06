@@ -1,5 +1,7 @@
 #!/usr/bin/zsh
 
+TMUX_CONFIG_FILE=~/.tmux.conf
+
 
 ######################
 # main functions
@@ -61,7 +63,7 @@ __ltmux_login(){
 	local ltmux_session="ltmux-$LOGNAME"
 	local client_tty
 	local exit_count=0
-	local first_exit
+	local first_exit=0
 	local curr_time
 
 	while true; do
@@ -154,10 +156,14 @@ __ltmux_enable(){
 	   ${n}
 	EOF
 
-	local config_file=~/.tmux.conf
-	local ltmux_config=$(__ltmux_config_present)
-	
-	if [[ -z $ltmux_config ]]; then
+	if __ltmux_config_keep; then
+		echo "   ${y}tmux${g} config file kept untouched!${n}"
+		echo
+
+		return
+	fi
+
+	if ! __ltmux_config_present; then
 		local yesno
 
 		echo -n  "   ${g}Do you want to install default ltmux config [Y/n]: ${n}"
@@ -197,10 +203,14 @@ __ltmux_disable(){
 	   ${n}
 	EOF
 
-	local config_file=~/.tmux.conf
-	local ltmux_config=$(__ltmux_config_present)
+	if __ltmux_config_keep; then
+		echo "   ${y}tmux${g} config file kept untouched!${n}"
+		echo
 
-	if [[ -n $ltmux_config ]]; then
+		return
+	fi
+
+	if __ltmux_config_present; then
 		local yesno
 
 		echo -n "   ${g}Do you want to remove default ltmux config [Y/n]: ${n}"
@@ -413,16 +423,22 @@ __ltmux_config_install(){
 	local y='[33m'
 	local n='[0m'
 
-	local config_file=~/.tmux.conf
-	local ltmux_config=$(__ltmux_config_present)
+	if __ltmux_config_keep; then
+		echo 
+		echo "   ${y}tmux${g} config file kept untouched!${n}"
+		echo
+
+		return
+	fi
+
 	local moved=0
 
-	if [[ -f $config_file ]] && [[ -z $ltmux_config ]]; then
-		mv $config_file $config_file.ORG
+	if ! __ltmux_config_present && [[ -f $TMUX_CONFIG_FILE ]]; then
+		mv $TMUX_CONFIG_FILE $TMUX_CONFIG_FILE.ORG
 		moved=1
 	fi
 
-	__ltmux_config_output > $config_file
+	__ltmux_config_output > $TMUX_CONFIG_FILE
 	__ltmux_exit_keys_add
 
 	echo    "   "
@@ -443,18 +459,24 @@ __ltmux_config_remove(){
 	local y='[33m'
 	local n='[0m'
 
-	local config_file=~/.tmux.conf
-	
-	local ltmux_config=$(__ltmux_config_present)
+	if __ltmux_config_keep; then
+		echo 
+		echo "   ${y}tmux${g} config file kept untouched!${n}"
+		echo
 
-	if [[ -f $config_file ]] && [[ -z $ltmux_config ]]; then
+		return
+	fi
+
+	local ltmux_config=$(__ltmux_config_present && echo "yes")
+
+	if [[ -f $TMUX_CONFIG_FILE ]] && [[ -z $ltmux_config ]]; then
 		cat <<-EOF
 		   ${g}
 		   Not ${y}ltmux${g} config. Not going to remove it!
 		   ${n}
 		EOF
 
-		exit 1
+		return 1
 	fi
 
 	# echo empty line and start green text
@@ -466,7 +488,7 @@ __ltmux_config_remove(){
 	if [[ -n $ltmux_config ]]; then
 		local message
 
-		if message=$(rm $config_file 2>&1); then
+		if message=$(rm $TMUX_CONFIG_FILE 2>&1); then
 			echo -n "   Default ${y}ltmux${g} config removed! "
 
 		else
@@ -483,10 +505,10 @@ __ltmux_config_remove(){
 
 	# if old config is present restore it
 	#
-	if [[ -f $config_file.ORG ]]; then
+	if [[ -f $TMUX_CONFIG_FILE.ORG ]]; then
 		[[ -z $ltmux_config ]] && echo "   "
 
-		mv $config_file.ORG $config_file &&
+		mv $TMUX_CONFIG_FILE.ORG $TMUX_CONFIG_FILE &&
 		echo "Old config restored!"
 
 	elif [[ -n $ltmux_config ]]; then
@@ -494,7 +516,7 @@ __ltmux_config_remove(){
 
 	fi
 
-	if [[ ! -f $config_file ]] && [[ -z $ltmux_config ]]; then
+	if [[ ! -f $TMUX_CONFIG_FILE ]] && [[ -z $ltmux_config ]]; then
 		echo "   No tmux config file to remove!"
 	fi
 
@@ -507,9 +529,8 @@ __ltmux_config_edit(){
 	local n='[0m'
 
 	local message
-	local config_file=~/.tmux.conf
 
-	if [[ ! -f $config_file ]]; then
+	if [[ ! -f $TMUX_CONFIG_FILE ]]; then
 		cat <<-EOF
 		   ${g}
 		   There is no tmux config file to edit!
@@ -519,9 +540,7 @@ __ltmux_config_edit(){
 		exit 1
 	fi
 
-	local ltmux_config=$(__ltmux_config_present)
-
-	if [[ -z $ltmux_config ]]; then
+	if ! __ltmux_config_present; then
 		cat <<-EOF
 		   ${g}
 		   Existing tmux config file is not from ${y}ltmux${g}!
@@ -551,7 +570,7 @@ __ltmux_config_edit(){
 
 	fi
 
-	$active_editor $config_file
+	$active_editor $TMUX_CONFIG_FILE
 }
 
 __ltmux_config_keys(){
@@ -569,12 +588,21 @@ __ltmux_config_output(){
 }
 
 __ltmux_config_present(){
-	local config_file=~/.tmux.conf
 
-	[[ -f $config_file ]] || return
+	[[ -f $TMUX_CONFIG_FILE ]] || return 1
 
-	grep 'This is ltmux default config file!' $config_file
-	grep '##### LTMUX DEFAULT CONFIG #####'   $config_file
+	grep -E '#\s+LTMUX\s+DEFAULT\s+CONFIG\s+#' $TMUX_CONFIG_FILE >/dev/null || return 1
+
+	return 0
+}
+
+__ltmux_config_keep(){
+
+	[[ -f $TMUX_CONFIG_FILE ]] || return 1
+
+	grep -E '#\s+LTMUX\s+KEEP\s+CONFIG\s+#' $TMUX_CONFIG_FILE >/dev/null || return 1
+
+	return 0
 }
 
 
@@ -582,11 +610,10 @@ __ltmux_config_present(){
 # exit keys install/remove
 #
 __ltmux_exit_keys_add(){
-	local config_file=~/.tmux.conf
 
-	cat <<-"EOF" >> $config_file
+	cat <<-"EOF" >> $TMUX_CONFIG_FILE
 
-		##### EXIT KEYS ####################################################
+		##### LTMUX EXIT KEYS ##############################################
 		#
 		# To properly exit presistent tmux session, lock file has to
 		# be removed. Here are defined key bindings for "exit keys":
@@ -597,6 +624,7 @@ __ltmux_exit_keys_add(){
 		# You can change key binding to suit your need, but do not
 		# change the code! Do not edit commented lines. They are 
 		# automaticaly added by script and will also be removed.
+		#
 		#
 		
 		bind-key q \
@@ -614,28 +642,27 @@ __ltmux_exit_keys_add(){
 		        tmux kill-session"'
 
 		#
-		##### EXIT KEYS ####################################################
+		##### LTMUX EXIT KEYS ##############################################
 	EOF
 }
 
 __ltmux_exit_keys_remove(){
-	local config_file=~/.tmux.conf
 
-	[[ -f $config_file ]] || return
+	[[ -f $TMUX_CONFIG_FILE ]] || return
 
-	cat $config_file |\
+	cat $TMUX_CONFIG_FILE |\
 	awk '
 		/^[ 	]*$/         {spaces = spaces "\n";   next}
-		/### EXIT KEYS ###/  {exit_keys = !exit_keys; next}
+		/### LTMUX EXIT KEYS ###/  {exit_keys = !exit_keys; next}
 
 		! exit_keys{
 			if (spaces != "")printf "%s", spaces;
 			spaces = ""
 			print
 		}
-	' > $config_file.tmp
+	' > $TMUX_CONFIG_FILE.tmp
 
-	mv $config_file.tmp $config_file
+	mv $TMUX_CONFIG_FILE.tmp $TMUX_CONFIG_FILE
 }
 
 
