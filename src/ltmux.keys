@@ -1,0 +1,68 @@
+
+   tmux keys:           (press Q to exit this help)  
+   ================================================  
+   prefix = ALT+1       (pres ALT+1 & release)       
+ 
+ 
+   [ session ]
+      closing:
+        prefix q      quit session
+        prefix x      kill entire session
+        prefix 0      close current panel/tab
+ 
+      show help:
+        prefix ?      show this help
+        prefix H      show key bindings
+        prefix t      show time
+ 
+ 
+   [ tabs ]
+      creating:
+        prefix :      create new tab as last tab
+        prefix .      create new tab after current one
+ 
+      moving around:
+        prefix n      move to next tab
+ 
+        Alt+Left      move to next tab
+        Alt+Right     move to previous tab
+ 
+      moving tabs:
+        prefix >      move tab to the right
+        prefix <      move tab to the left
+ 
+      rename tab:
+        prefix N      rename current tab
+ 
+ 
+   [ panels ]
+      creating:
+        prefix h     split horizontally
+        prefix v     split vertically
+ 
+        prefix -     split horizontally
+        prefix /     split vertically
+ 
+      moving around:
+        Alt+2               move to next panel                            
+                                                                          
+        prefix Left         move to left panel ------+                    
+        prefix Right        move to right panel      |                    
+        prefix Up           move to panel above      |                    
+        prefix Down         move to panel below      |                    
+                                                     |                    
+      resizing panels:                               |                    
+        Alt+Enter           zoom/unzoom panel        |                    
+                                                     |                    
+        hold Alt+1+Left     expand panel to LEFT     |                    
+        hold Alt+1+Right    expand panel to RIGHT    |                    
+        hold Alt+1+Up       expand panel to UP       |                    
+        hold Alt+1+Down     expand panel to DOWN     |                    
+                                                     |                    
+      moving panels:                                 |        +---+       
+        hold Alt+1+Delete   move panel to LEFT       |        | U |       
+        hold Alt+1+PgDown   move panel to RIGHT      |    +---+---+---+   
+        hold Alt+1+Home     move panel to UP          >   | L | D | R |   
+        hold Alt+1+End      move panel to DOWN ------+    +---+---+---+   
+
+

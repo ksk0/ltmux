@@ -30,8 +30,6 @@ __ltmux_info(){
 }
 
 __ltmux_login(){
-	{echo -n "tmux login: "; date} >> /tmp/ltmux_login
-
 	local ltmux_pause=0.4
 
 	local parent=$(
@@ -67,8 +65,6 @@ __ltmux_login(){
 	local curr_time
 
 	while true; do
-		{echo -n "in loop:    "; date} >> /tmp/ltmux_login
-
 		ltmux_lock="/run/user/$EUID/ltmux.lck"
 
 		# there is existing tmux session
@@ -225,6 +221,7 @@ __ltmux_config(){
 		install) __ltmux_config_install;;
 		remove)  __ltmux_config_remove;;
 		edit)    __ltmux_config_edit;;
+		keys)    __ltmux_config_keys;;
 		*)       __ltmux_help;;
 	esac
 }
@@ -555,6 +552,13 @@ __ltmux_config_edit(){
 	fi
 
 	$active_editor $config_file
+}
+
+__ltmux_config_keys(){
+	cat <<-EOF |
+		__LTMUX_CONFIG_KEYS__
+	EOF
+	base64 -d
 }
 
 __ltmux_config_output(){
