@@ -45,6 +45,7 @@
  
       moving around:
         Alt+2               move to next panel                            
+        prefix Insert       select pane and swap it with current
                                                                           
         prefix Left         move to left panel ------+                    
         prefix Right        move to right panel      |                    
