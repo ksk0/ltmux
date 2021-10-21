@@ -36,6 +36,15 @@ You can remove **ltmux** from system by running
 sudo make uninstall
 ```
 
+To install **tmux** into $HOME/bin directory (when user does not have
+**root** privilages) run:
+```
+sudo make install-home
+```
+This will create **$HOME/bin** directory (if one does not exist), and
+install **ltmux** into that directory. Auto complete files will not be
+installed. User should add **$HOME/bin** into **PATH** variable.
+
 
 # Usage
 To activate **ltmux** run:
